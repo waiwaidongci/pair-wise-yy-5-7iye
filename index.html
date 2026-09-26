@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>手工织锦纹样排版台</title>
+  <title>手工织锦纹样方案版本台</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Arial, "PingFang SC", sans-serif; background: #f3efe7; color: #282018; }
     header { padding: 18px 24px; background: #fffaf2; border-bottom: 1px solid #d9cdbc; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
     h1 { margin: 0; font-size: 26px; }
+    h2 { font-size: 17px; margin: 16px 0 6px; }
     button { border: 0; border-radius: 8px; padding: 10px 13px; background: #8d3e37; color: #fff; font-weight: 800; cursor: pointer; }
     button.secondary { background: #71675c; }
     input, select { width: 100%; border: 1px solid #d9cdbc; border-radius: 6px; padding: 9px; font: inherit; background: #fff; }
     label { display: block; margin: 9px 0 5px; color: #76695e; font-size: 13px; }
-    .app { display: grid; grid-template-columns: 280px 1fr 320px; gap: 16px; padding: 16px; }
+    .app { display: grid; grid-template-columns: 260px 1fr 300px 300px; gap: 16px; padding: 16px; align-items: start; }
     .panel { background: #fffaf2; border: 1px solid #d9cdbc; border-radius: 8px; padding: 14px; }
     .grid { display: grid; gap: 2px; margin: 0 auto; width: min(100%, 720px); border: 6px solid #72533c; background: #72533c; }
     .cell { aspect-ratio: 1; background: #f8ead2; cursor: pointer; border-radius: 2px; }
@@ -27,20 +28,34 @@
     .mini { aspect-ratio: 1; border-radius: 2px; }
     .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .warning { color: #a03a2e; font-weight: 800; }
-    @media (max-width: 1000px) { header { display: block; } .app { grid-template-columns: 1fr; } }
+    .vlist { display: grid; gap: 10px; margin-top: 10px; }
+    .v-item { border: 1px solid #e1d5c5; border-radius: 8px; padding: 10px; background: #fff; display: grid; gap: 6px; }
+    .v-item.auto { background: #f6f1e8; }
+    .v-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .v-head b { word-break: break-all; }
+    .v-time { color: #9a8d7e; font-size: 12px; white-space: nowrap; }
+    .v-meta { color: #76695e; font-size: 13px; }
+    .v-usage { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: #f3efe7; border-radius: 999px; padding: 2px 8px; }
+    .chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.15); }
+    .v-item button { padding: 6px 10px; font-size: 13px; justify-self: start; }
+    .msg { font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+    .msg.error { color: #a03a2e; font-weight: 700; }
+    .msg.ok { color: #355b38; font-weight: 700; }
+    @media (max-width: 1180px) { header { display: block; } .app { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <header>
-    <div><h1>手工织锦纹样排版台</h1><div>绘制经纬网格纹样，统计色线用量并保存方案。</div></div>
-    <div class="toolbar"><button id="saveBtn">保存方案</button><button id="exportBtn" class="secondary">导出JSON</button></div>
+    <div><h1>手工织锦纹样方案版本台</h1><div>绘制经纬网格纹样，统计色线用量，按命名版本保存多套配色方案。</div></div>
+    <div class="toolbar"><button id="exportBtn" class="secondary">导出JSON</button></div>
   </header>
   <main class="app">
     <aside class="panel">
       <h2>画布</h2>
-      <label>经向列数</label><input id="cols" type="number" value="18" min="6" max="36">
-      <label>纬向行数</label><input id="rows" type="number" value="14" min="6" max="32">
-      <button id="newBtn">新建网格</button>
+      <label>经向列数（6–36）</label><input id="cols" type="number" value="18" min="6" max="36">
+      <label>纬向行数（6–32）</label><input id="rows" type="number" value="14" min="6" max="32">
+      <button id="resizeBtn">调整网格（保留重叠区域）</button>
       <h2>色线库</h2>
       <div class="palette" id="palette"></div>
       <h2>基础纹样块</h2>
@@ -52,9 +67,17 @@
     </aside>
     <section class="panel"><div class="grid" id="grid"></div></section>
     <aside class="panel">
+      <h2>方案版本</h2>
+      <label>方案名称</label>
+      <input id="versionName" type="text" maxlength="30" placeholder="例如：朱红地金线菱形">
+      <button id="saveBtn" style="margin-top:8px">保存新版本</button>
+      <p id="versionMsg" class="msg"></p>
+      <div class="vlist" id="versionList"></div>
+    </aside>
+    <aside class="panel">
       <h2>操作</h2>
       <div class="toolbar"><button id="undoBtn" class="secondary">撤销</button><button id="redoBtn" class="secondary">重做</button></div>
-      <p>点击填色，按住拖动可连续填色。</p>
+      <p>点击填色，按住拖动可连续填色。打开旧版本或调整网格后，都可用撤销还原。</p>
       <h2>用色统计</h2>
       <div class="stats" id="stats"></div>
       <h2>重复单元预览</h2>
@@ -64,22 +87,45 @@
     </aside>
   </main>
   <script>
+    const CANVAS_KEY = "zfl31Pattern";
+    const VERSIONS_KEY = "zfl31Versions";
     const colors = ["#f7e7c4","#a6322d","#1f5f78","#d6a437","#355b38","#713d7b","#1e1b18","#e98c52"];
     const grid = document.querySelector("#grid");
     const palette = document.querySelector("#palette");
     const stats = document.querySelector("#stats");
     const preview = document.querySelector("#preview");
     const risk = document.querySelector("#risk");
+    const colsInput = document.querySelector("#cols");
+    const rowsInput = document.querySelector("#rows");
+    const nameInput = document.querySelector("#versionName");
+    const versionMsg = document.querySelector("#versionMsg");
+    const versionList = document.querySelector("#versionList");
     let cols = 18, rows = 14, active = 1, block = "dot", dragging = false;
     let cells = [];
     let undo = [], redo = [];
+    let versions = JSON.parse(localStorage.getItem(VERSIONS_KEY) || "[]");
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+    function clock() {
+      const d = new Date(), p = n => String(n).padStart(2, "0");
+      return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+    }
+    function fmtTime(t) {
+      const d = new Date(t), p = n => String(n).padStart(2, "0");
+      return (d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    }
+
     function init(loadSaved = true) {
-      const saved = loadSaved && JSON.parse(localStorage.getItem("zfl31Pattern") || "null");
+      const saved = loadSaved && JSON.parse(localStorage.getItem(CANVAS_KEY) || "null");
       if (saved) { cols = saved.cols; rows = saved.rows; cells = saved.cells; }
-      else { cols = Number(document.querySelector("#cols").value); rows = Number(document.querySelector("#rows").value); cells = Array(cols * rows).fill(0); }
-      document.querySelector("#cols").value = cols; document.querySelector("#rows").value = rows;
+      else { cols = Number(colsInput.value); rows = Number(rowsInput.value); cells = Array(cols * rows).fill(0); }
+      syncInputs();
       render();
     }
+    function syncInputs() { colsInput.value = cols; rowsInput.value = rows; }
+    function persistCanvas() { localStorage.setItem(CANVAS_KEY, JSON.stringify({ cols, rows, cells })); }
+    function persistVersions() { localStorage.setItem(VERSIONS_KEY, JSON.stringify(versions)); }
+
     function render() {
       palette.innerHTML = colors.map((c, i) => '<button class="swatch '+(i===active?'active':'')+'" data-color="'+i+'" style="background:'+c+'"></button>').join("");
       palette.querySelectorAll("[data-color]").forEach(el => el.onclick = () => { active = Number(el.dataset.color); render(); });
@@ -91,8 +137,11 @@
       });
       window.onpointerup = () => dragging = false;
       renderStats();
+      renderVersions();
+      persistCanvas();
     }
-    function snapshot() { undo.push([...cells]); redo = []; if (undo.length > 50) undo.shift(); }
+    function snapshot() { undo.push({ cols, rows, cells: [...cells] }); redo = []; if (undo.length > 50) undo.shift(); }
+    function restoreState(s) { cols = s.cols; rows = s.rows; cells = [...s.cells]; syncInputs(); render(); }
     function paint(i) {
       snapshot();
       const targets = pattern(i);
@@ -118,15 +167,106 @@
       }
       risk.innerHTML = riskRows.length ? '<p class="warning">第'+riskRows.join("、")+'行换色过密，可能断线。</p>' : '<p>暂无明显断线风险。</p>';
     }
+
+    function usageChips(cellsData) {
+      return colors.map((c, i) => {
+        const n = cellsData.filter(v => v === i).length;
+        return n ? '<span class="chip" title="色线'+i+'用量"><i style="background:'+c+'"></i>'+n+'</span>' : "";
+      }).join("");
+    }
+    function renderVersions() {
+      if (!versions.length) {
+        versionList.innerHTML = '<p class="v-meta">还没有保存过版本。填好名称后点“保存新版本”。</p>';
+        return;
+      }
+      versionList.innerHTML = versions.map(v =>
+        '<div class="v-item'+(v.auto ? " auto" : "")+'">'
+        + '<div class="v-head"><b>'+escapeHtml(v.name)+'</b><span class="v-time">'+fmtTime(v.savedAt)+'</span></div>'
+        + '<div class="v-meta">网格 '+v.cols+' 列 × '+v.rows+' 行 · 共 '+v.cells.length+' 格'+(v.auto ? ' · 自动留存' : '')+'</div>'
+        + '<div class="v-usage">'+usageChips(v.cells)+'</div>'
+        + '<button data-open="'+v.id+'">打开此版本</button>'
+        + '</div>'
+      ).join("");
+      versionList.querySelectorAll("[data-open]").forEach(el => el.onclick = () => openVersion(el.dataset.open));
+    }
+    function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+    function showMsg(text, isError) {
+      versionMsg.textContent = text;
+      versionMsg.className = "msg " + (isError ? "error" : "ok");
+    }
+    function uniqueName(base) {
+      let name = base, k = 2;
+      while (versions.some(v => v.name === name)) name = base + "（" + k++ + "）";
+      return name;
+    }
+    function saveNamedVersion() {
+      const name = nameInput.value.trim();
+      if (!name) { showMsg("请先填写方案名称。", true); nameInput.focus(); return; }
+      if (versions.some(v => v.name === name)) {
+        showMsg("已存在同名方案「" + name + "」，重名不能覆盖，请换个名称。", true);
+        nameInput.focus();
+        return;
+      }
+      versions.unshift({ id: uid(), name, cols, rows, cells: [...cells], savedAt: Date.now() });
+      persistVersions();
+      nameInput.value = "";
+      showMsg("已保存新版本「" + name + "」。");
+      renderVersions();
+    }
+    function saveAutoVersion(prefix) {
+      const v = { id: uid(), name: uniqueName(prefix + " " + clock()), cols, rows, cells: [...cells], savedAt: Date.now(), auto: true };
+      versions.unshift(v);
+      persistVersions();
+      renderVersions();
+      return v;
+    }
+    function openVersion(id) {
+      const v = versions.find(x => x.id === id);
+      if (!v) return;
+      saveAutoVersion("恢复前备份");
+      snapshot();
+      cols = v.cols; rows = v.rows; cells = [...v.cells];
+      syncInputs();
+      render();
+      showMsg("已打开「" + v.name + "」：行列数、格子颜色与统计已带回，原画布已留为恢复前版本；点撤销可回到刚才的画布。");
+    }
+    function cutHasContent(nc, nr) {
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++)
+          if ((x >= nc || y >= nr) && cells[y * cols + x] !== 0) return true;
+      return false;
+    }
+    function resizeGrid() {
+      const nc = Math.max(6, Math.min(36, Math.floor(Number(colsInput.value) || cols)));
+      const nr = Math.max(6, Math.min(32, Math.floor(Number(rowsInput.value) || rows)));
+      if (nc === cols && nr === rows) { syncInputs(); return; }
+      if ((nc < cols || nr < rows) && cutHasContent(nc, nr)) saveAutoVersion("缩小前备份");
+      snapshot();
+      const next = Array(nc * nr).fill(0);
+      for (let y = 0; y < Math.min(rows, nr); y++)
+        for (let x = 0; x < Math.min(cols, nc); x++)
+          next[y * nc + x] = cells[y * cols + x];
+      cols = nc; rows = nr; cells = next;
+      syncInputs();
+      render();
+    }
+
     document.querySelectorAll("[data-block]").forEach(btn => btn.onclick = () => block = btn.dataset.block);
-    document.querySelector("#newBtn").onclick = () => { undo = []; redo = []; init(false); };
-    document.querySelector("#undoBtn").onclick = () => { if (!undo.length) return; redo.push([...cells]); cells = undo.pop(); render(); };
-    document.querySelector("#redoBtn").onclick = () => { if (!redo.length) return; undo.push([...cells]); cells = redo.pop(); render(); };
-    document.querySelector("#saveBtn").onclick = () => localStorage.setItem("zfl31Pattern", JSON.stringify({ cols, rows, cells }));
+    document.querySelector("#resizeBtn").onclick = resizeGrid;
+    document.querySelector("#undoBtn").onclick = () => { if (!undo.length) return; redo.push({ cols, rows, cells: [...cells] }); restoreState(undo.pop()); };
+    document.querySelector("#redoBtn").onclick = () => { if (!redo.length) return; undo.push({ cols, rows, cells: [...cells] }); restoreState(redo.pop()); };
+    document.querySelector("#saveBtn").onclick = saveNamedVersion;
+    nameInput.onkeydown = e => { if (e.key === "Enter") saveNamedVersion(); };
     document.querySelector("#exportBtn").onclick = () => {
-      const data = { cols, rows, cells, usage: colors.map((color, i) => ({ color, count: cells.filter(v => v === i).length })) };
+      const data = {
+        name: "当前画布",
+        exportedAt: new Date().toISOString(),
+        cols, rows,
+        cells,
+        usage: colors.map((color, i) => ({ color, count: cells.filter(v => v === i).length }))
+      };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "brocade-pattern.json"; a.click(); URL.revokeObjectURL(a.href);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "brocade-pattern-" + cols + "x" + rows + ".json"; a.click(); URL.revokeObjectURL(a.href);
     };
     init();
   </script>
