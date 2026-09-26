@@ -27,20 +27,44 @@
     .mini { aspect-ratio: 1; border-radius: 2px; }
     .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .warning { color: #a03a2e; font-weight: 800; }
+    .hint { font-size: 12px; color: #76695e; }
+    .notice { min-height: 18px; margin: 8px 0 0; font-size: 13px; font-weight: 700; }
+    .notice.err { color: #a03a2e; }
+    .notice.ok { color: #355b38; }
+    .versions { display: grid; gap: 10px; margin: 10px 0; max-height: 340px; overflow: auto; }
+    .version { border: 1px solid #e1d5c5; border-radius: 8px; background: #fffdf8; padding: 8px 10px; display: grid; gap: 5px; }
+    .vhead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .vhead b { word-break: break-all; }
+    .vhead span { color: #76695e; font-size: 12px; white-space: nowrap; }
+    .vmeta { color: #76695e; font-size: 12px; }
+    .vchips { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #76695e; }
+    .vchips i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 3px; }
+    .vbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .vbtns button { padding: 7px 10px; font-size: 13px; }
     @media (max-width: 1000px) { header { display: block; } .app { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <header>
-    <div><h1>手工织锦纹样排版台</h1><div>绘制经纬网格纹样，统计色线用量并保存方案。</div></div>
-    <div class="toolbar"><button id="saveBtn">保存方案</button><button id="exportBtn" class="secondary">导出JSON</button></div>
+    <div><h1>手工织锦纹样排版台</h1><div>绘制经纬网格纹样，统计色线用量，按名称保存方案版本。</div></div>
+    <div class="toolbar"><button id="exportBtn" class="secondary">导出JSON</button></div>
   </header>
   <main class="app">
     <aside class="panel">
       <h2>画布</h2>
       <label>经向列数</label><input id="cols" type="number" value="18" min="6" max="36">
       <label>纬向行数</label><input id="rows" type="number" value="14" min="6" max="32">
-      <button id="newBtn">新建网格</button>
+      <div class="toolbar">
+        <button id="resizeBtn">应用行列</button>
+        <button id="clearBtn" class="secondary">清空画布</button>
+      </div>
+      <p class="hint">调整行列会保留重叠区域；缩小裁掉的图案可从最近保存的版本取回。</p>
+      <h2>方案版本</h2>
+      <label>方案名称</label><input id="vname" type="text" placeholder="例如：靛蓝菱格·第三版">
+      <button id="saveBtn">保存为版本</button>
+      <div class="notice" id="notice"></div>
+      <div class="versions" id="versions"></div>
+      <button id="retrieveBtn" class="secondary">从最近版本取回裁掉的图案</button>
       <h2>色线库</h2>
       <div class="palette" id="palette"></div>
       <h2>基础纹样块</h2>
@@ -54,7 +78,7 @@
     <aside class="panel">
       <h2>操作</h2>
       <div class="toolbar"><button id="undoBtn" class="secondary">撤销</button><button id="redoBtn" class="secondary">重做</button></div>
-      <p>点击填色，按住拖动可连续填色。</p>
+      <p>点击填色，按住拖动可连续填色。打开版本、调整行列、清空画布也可撤销。</p>
       <h2>用色统计</h2>
       <div class="stats" id="stats"></div>
       <h2>重复单元预览</h2>
@@ -70,29 +94,51 @@
     const stats = document.querySelector("#stats");
     const preview = document.querySelector("#preview");
     const risk = document.querySelector("#risk");
+    const notice = document.querySelector("#notice");
+    const versionsEl = document.querySelector("#versions");
+    const colsInput = document.querySelector("#cols");
+    const rowsInput = document.querySelector("#rows");
     let cols = 18, rows = 14, active = 1, block = "dot", dragging = false;
     let cells = [];
     let undo = [], redo = [];
-    function init(loadSaved = true) {
-      const saved = loadSaved && JSON.parse(localStorage.getItem("zfl31Pattern") || "null");
-      if (saved) { cols = saved.cols; rows = saved.rows; cells = saved.cells; }
-      else { cols = Number(document.querySelector("#cols").value); rows = Number(document.querySelector("#rows").value); cells = Array(cols * rows).fill(0); }
-      document.querySelector("#cols").value = cols; document.querySelector("#rows").value = rows;
+    function init() {
+      const saved = JSON.parse(localStorage.getItem("zfl31Pattern") || "null");
+      if (saved && Array.isArray(saved.cells) && saved.cells.length === saved.cols * saved.rows) {
+        cols = saved.cols; rows = saved.rows; cells = saved.cells;
+      } else {
+        cols = Number(colsInput.value); rows = Number(rowsInput.value); cells = Array(cols * rows).fill(0);
+      }
+      syncInputs();
       render();
+      renderVersions();
+    }
+    function syncInputs() { colsInput.value = cols; rowsInput.value = rows; }
+    function persistCanvas() { localStorage.setItem("zfl31Pattern", JSON.stringify({ cols, rows, cells })); }
+    function loadVersions() { return JSON.parse(localStorage.getItem("zfl31Versions") || "[]"); }
+    function saveVersions(v) { localStorage.setItem("zfl31Versions", JSON.stringify(v)); }
+    function say(msg, kind) { notice.textContent = msg; notice.className = "notice " + (kind || ""); }
+    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function fmtTime(t, withSeconds) {
+      const d = new Date(t), p = n => String(n).padStart(2, "0");
+      const s = p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+      return withSeconds ? s + ":" + p(d.getSeconds()) : s;
     }
     function render() {
       palette.innerHTML = colors.map((c, i) => '<button class="swatch '+(i===active?'active':'')+'" data-color="'+i+'" style="background:'+c+'"></button>').join("");
       palette.querySelectorAll("[data-color]").forEach(el => el.onclick = () => { active = Number(el.dataset.color); render(); });
       grid.style.gridTemplateColumns = "repeat("+cols+", 1fr)";
-      grid.innerHTML = cells.map((v, i) => '<div class="cell" data-i="'+i+'" style="background:'+colors[v]+'"></div>').join("");
+      grid.innerHTML = cells.map((v, i) => '<div class="cell" data-i="'+i+'" style="background:'+(colors[v] || colors[0])+'"></div>').join("");
       grid.querySelectorAll(".cell").forEach(el => {
         el.onpointerdown = () => { dragging = true; paint(Number(el.dataset.i)); };
         el.onpointerenter = () => { if (dragging) paint(Number(el.dataset.i)); };
       });
       window.onpointerup = () => dragging = false;
       renderStats();
+      persistCanvas();
     }
-    function snapshot() { undo.push([...cells]); redo = []; if (undo.length > 50) undo.shift(); }
+    function state() { return { cols, rows, cells: [...cells] }; }
+    function applyState(s) { cols = s.cols; rows = s.rows; cells = [...s.cells]; syncInputs(); }
+    function snapshot() { undo.push(state()); redo = []; if (undo.length > 50) undo.shift(); }
     function paint(i) {
       snapshot();
       const targets = pattern(i);
@@ -118,11 +164,114 @@
       }
       risk.innerHTML = riskRows.length ? '<p class="warning">第'+riskRows.join("、")+'行换色过密，可能断线。</p>' : '<p>暂无明显断线风险。</p>';
     }
+    function renderVersions() {
+      const versions = loadVersions();
+      if (!versions.length) {
+        versionsEl.innerHTML = '<p class="hint">还没有保存的版本。填好名称后点「保存为版本」。</p>';
+        return;
+      }
+      versionsEl.innerHTML = versions.map((v, i) => {
+        const counts = colors.map((_, ci) => v.cells.filter(c => c === ci).length);
+        const used = v.cells.filter(c => c !== 0).length;
+        const chips = counts.map((n, ci) => n ? '<span><i style="background:'+colors[ci]+'"></i>'+n+'</span>' : "").join("");
+        return '<div class="version">'+
+          '<div class="vhead"><b>'+esc(v.name || "未命名")+'</b><span>'+fmtTime(v.savedAt)+'</span></div>'+
+          '<div class="vmeta">'+v.cols+' 列 × '+v.rows+' 行 · 用量 '+used+' 格</div>'+
+          '<div class="vchips">'+chips+'</div>'+
+          '<div class="vbtns"><button data-open="'+i+'">打开</button><button class="secondary" data-del="'+i+'">删除</button></div>'+
+        '</div>';
+      }).reverse().join("");
+      versionsEl.querySelectorAll("[data-open]").forEach(el => el.onclick = () => openVersion(Number(el.dataset.open)));
+      versionsEl.querySelectorAll("[data-del]").forEach(el => el.onclick = () => deleteVersion(Number(el.dataset.del)));
+    }
+    function validVersion(v) { return v && Array.isArray(v.cells) && v.cells.length === v.cols * v.rows; }
+    function uniqueName(base, versions) {
+      if (!versions.some(v => v.name === base)) return base;
+      let n = 2;
+      while (versions.some(v => v.name === base + " (" + n + ")")) n++;
+      return base + " (" + n + ")";
+    }
+    function openVersion(i) {
+      const versions = loadVersions();
+      const v = versions[i];
+      if (!validVersion(v)) { say("该版本数据已损坏，无法打开。", "err"); return; }
+      snapshot();
+      const auto = uniqueName("恢复前 " + fmtTime(Date.now(), true), versions);
+      versions.push({ name: auto, cols, rows, cells: [...cells], savedAt: Date.now() });
+      saveVersions(versions);
+      cols = v.cols; rows = v.rows; cells = [...v.cells];
+      syncInputs();
+      render();
+      renderVersions();
+      say("已打开「"+v.name+"」，刚才的画布已留为「"+auto+"」，点撤销即可返回。", "ok");
+    }
+    function deleteVersion(i) {
+      const versions = loadVersions();
+      const v = versions[i];
+      if (!v) return;
+      if (!confirm("确定删除方案「"+v.name+"」？删除后无法找回。")) return;
+      versions.splice(i, 1);
+      saveVersions(versions);
+      renderVersions();
+      say("已删除「"+v.name+"」。", "ok");
+    }
     document.querySelectorAll("[data-block]").forEach(btn => btn.onclick = () => block = btn.dataset.block);
-    document.querySelector("#newBtn").onclick = () => { undo = []; redo = []; init(false); };
-    document.querySelector("#undoBtn").onclick = () => { if (!undo.length) return; redo.push([...cells]); cells = undo.pop(); render(); };
-    document.querySelector("#redoBtn").onclick = () => { if (!redo.length) return; undo.push([...cells]); cells = redo.pop(); render(); };
-    document.querySelector("#saveBtn").onclick = () => localStorage.setItem("zfl31Pattern", JSON.stringify({ cols, rows, cells }));
+    document.querySelector("#resizeBtn").onclick = () => {
+      const nc = Math.min(36, Math.max(6, Number(colsInput.value) || cols));
+      const nr = Math.min(32, Math.max(6, Number(rowsInput.value) || rows));
+      if (nc === cols && nr === rows) { syncInputs(); return; }
+      snapshot();
+      const next = Array(nc * nr).fill(0);
+      for (let y = 0; y < Math.min(rows, nr); y++)
+        for (let x = 0; x < Math.min(cols, nc); x++)
+          next[y * nc + x] = cells[y * cols + x];
+      cols = nc; rows = nr; cells = next;
+      syncInputs();
+      render();
+      say("已调整为 "+nc+" 列 × "+nr+" 行，重叠区域已保留。", "ok");
+    };
+    document.querySelector("#clearBtn").onclick = () => {
+      if (!cells.some(v => v !== 0)) return;
+      snapshot();
+      cells = Array(cols * rows).fill(0);
+      render();
+      say("画布已清空，可撤销。", "ok");
+    };
+    document.querySelector("#undoBtn").onclick = () => { if (!undo.length) return; redo.push(state()); applyState(undo.pop()); render(); };
+    document.querySelector("#redoBtn").onclick = () => { if (!redo.length) return; undo.push(state()); applyState(redo.pop()); render(); };
+    document.querySelector("#saveBtn").onclick = () => {
+      const nameInput = document.querySelector("#vname");
+      const name = nameInput.value.trim();
+      if (!name) { say("请先填写方案名称。", "err"); return; }
+      const versions = loadVersions();
+      if (versions.some(v => v.name === name)) { say("已存在同名方案「"+name+"」，不能覆盖。请换个名称，或先删除旧版本。", "err"); return; }
+      versions.push({ name, cols, rows, cells: [...cells], savedAt: Date.now() });
+      saveVersions(versions);
+      nameInput.value = "";
+      renderVersions();
+      say("已保存「"+name+"」（"+cols+" 列 × "+rows+" 行）。", "ok");
+    };
+    document.querySelector("#retrieveBtn").onclick = () => {
+      const versions = loadVersions();
+      if (!versions.length) { say("还没有保存过版本，无法取回。", "err"); return; }
+      const latest = versions[versions.length - 1];
+      if (!validVersion(latest)) { say("最近版本数据已损坏，无法取回。", "err"); return; }
+      const nc = Math.max(cols, latest.cols), nr = Math.max(rows, latest.rows);
+      const next = Array(nc * nr).fill(0);
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) next[y * nc + x] = cells[y * cols + x];
+      let found = 0;
+      for (let y = 0; y < Math.min(nr, latest.rows); y++)
+        for (let x = 0; x < Math.min(nc, latest.cols); x++) {
+          const t = y * nc + x, v = latest.cells[y * latest.cols + x];
+          if (next[t] === 0 && v !== 0) { next[t] = v; found++; }
+        }
+      if (!found) { say("最近版本「"+latest.name+"」中没有可补回的图案。", "err"); return; }
+      snapshot();
+      cols = nc; rows = nr; cells = next;
+      syncInputs();
+      render();
+      say("已从最近版本「"+latest.name+"」取回 "+found+" 格图案。", "ok");
+    };
     document.querySelector("#exportBtn").onclick = () => {
       const data = { cols, rows, cells, usage: colors.map((color, i) => ({ color, count: cells.filter(v => v === i).length })) };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
